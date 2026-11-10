@@ -708,13 +708,26 @@ input:focus-visible {
       calc(var(--dock-h) + var(--dock-gap) + 8px);
   }
 
-  .slots { gap: 8px; }
-  .slot figcaption {
+  .slots { gap: 8px; align-items: center; }
+  .slots .slot {
+    flex: 0 0 auto;
+    align-self: center;
+    width: calc((100% - 16px) / 3);
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .slots[data-count="1"] .slot { width: min(50vw, 190px); }
+  .slots[data-count="2"] .slot { width: min(calc((100% - 8px) / 2), 42vw); }
+  .slot figcaption,
+  html.is-keyboard .slot figcaption {
     height: 3.2em;
     padding: 0 4px 6px;
     font-size: 10px;
     line-height: 1.15;
   }
+
+  .dock-card { display: flex; flex-direction: column; gap: 10px; }
+  #feedback { order: -1; }
 
   #dock { width: min(560px, calc(100% - 16px)); }
 

@@ -184,6 +184,7 @@ let countdownTimer = 0;
 let leaving = false;
 let fitFrame = 0;
 let confettiTimer = 0;
+let keepKeyboard = false;
 let fullHeight = window.innerHeight;
 
 const CONFETTI_COLORS = ["#c23b33", "#8d241e", "#1c1915", "#a68456", "#6d645b"];
@@ -817,9 +818,19 @@ function renderSlots(animateLast) {
   }
 }
 
+function isCoarse() {
+  return window.matchMedia("(pointer: coarse)").matches;
+}
+
 function focusGuess() {
-  if (window.matchMedia("(pointer: coarse)").matches) return;
-  ui.guess.focus();
+  if (isCoarse() && !keepKeyboard) return;
+  if (document.activeElement === ui.guess) return;
+  ui.guess.focus({ preventScroll: true });
+}
+
+function releaseKeyboard() {
+  keepKeyboard = false;
+  if (document.activeElement === ui.guess) ui.guess.blur();
 }
 
 function reject(message) {
@@ -895,7 +906,7 @@ function closeRound(kind) {
   round.outcome = kind;
   round.examples = kind === "hit" ? "" : exampleSentence(round);
   ui.timerBlock.hidden = true;
-  ui.form.hidden = true;
+  ui.form.hidden = !keepKeyboard;
   ui.feedback.hidden = false;
   ui.feedback.classList.toggle("is-hit", kind === "hit");
   ui.feedback.classList.toggle("is-miss", kind !== "hit");
@@ -908,7 +919,7 @@ function closeRound(kind) {
   startCountdown(label);
   ui.scoreLine.textContent = `Score ${pointsSoFar()}`;
   renderHistory();
-  ui.guess.blur();
+  if (!keepKeyboard) ui.guess.blur();
   scheduleFit();
 }
 
@@ -974,6 +985,7 @@ function launchConfetti() {
 }
 
 function finish() {
+  releaseKeyboard();
   stopCountdown();
   stopRoundTimer();
   clearConfetti();
@@ -1024,17 +1036,18 @@ function submitGuess(typed) {
   ui.scoreLine.textContent = `Score ${pointsSoFar()}`;
   scheduleFit();
   if (round.found.length >= settings.places) {
-    ui.guess.blur();
+    if (!keepKeyboard) ui.guess.blur();
     closeRound("hit");
     return;
   }
-  ui.guess.focus();
+  focusGuess();
 }
 
 function startGame() {
   const pool = groupsFor(catalogs[settings.territory], settings.places);
   const count = Math.min(roundCount(), pool.length);
   if (!count) return;
+  keepKeyboard = isCoarse();
   rounds = shuffle(pool).slice(0, count).map((group) => ({
     letter: group.letter,
     pool: group.pool,
@@ -1055,6 +1068,7 @@ function startGame() {
 }
 
 function showIntro() {
+  releaseKeyboard();
   stopCountdown();
   stopRoundTimer();
   locked = true;
@@ -1100,6 +1114,11 @@ function bindSettings() {
   syncIntro();
   ui.start.addEventListener("click", startGame);
   ui.next.addEventListener("click", goNext);
+  ui.next.addEventListener("touchstart", (event) => {
+    if (!keepKeyboard) return;
+    event.preventDefault();
+    ui.next.click();
+  }, { passive: false });
   ui.replay.addEventListener("click", showIntro);
   ui.validate.addEventListener("mousedown", (event) => event.preventDefault());
   ui.form.addEventListener("submit", (event) => {
@@ -1116,6 +1135,15 @@ function bindSettings() {
   }, true);
   ui.guess.addEventListener("input", () => {
     if (ui.hint.textContent) ui.hint.textContent = "";
+  });
+  ui.guess.addEventListener("blur", () => {
+    if (!keepKeyboard) return;
+    window.setTimeout(() => {
+      if (!keepKeyboard) return;
+      const active = document.activeElement;
+      if (active && active.closest && active.closest("button")) return;
+      focusGuess();
+    }, 60);
   });
 }
 
