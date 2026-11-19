@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
   <title>À la lettre</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
   <div id="load-overlay" role="status" aria-live="polite" aria-busy="true" aria-label="Chargement">
@@ -36,14 +36,6 @@
         <button type="button" data-places="3" aria-pressed="true" aria-label="3 lieux">3</button>
       </div>
 
-      <p class="field-label">Rythme</p>
-      <div class="mode-switch mode-switch-3" role="group" aria-label="Niveau de stress">
-        <button type="button" data-ms="15000" aria-pressed="true">À la cool</button>
-        <button type="button" data-ms="10000" aria-pressed="false">Stressant</button>
-        <button type="button" data-ms="5000" aria-pressed="false">Hyper stressant</button>
-      </div>
-      <p class="mode-note" id="pace-note"></p>
-
       <p class="field-label">Partie</p>
       <div class="mode-switch" role="group" aria-label="Nombre de manches">
         <button type="button" data-length="5" aria-pressed="true">5 manches</button>
@@ -57,14 +49,13 @@
   <div id="timer-block" class="timer-block" hidden aria-label="Temps restant">
     <div class="timer-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
       <div id="timer-fill" class="timer-fill">
-        <span class="timer-value" id="timer-value">15 s</span>
+        <span class="timer-value" id="timer-value">30 s</span>
       </div>
     </div>
   </div>
 
   <header id="chrome" hidden>
     <p class="round-meta" id="round-kicker">Manche 1 / 5</p>
-    <p class="round-prompt" id="score-line">Score 0</p>
   </header>
 
   <aside id="history-wrap" class="score-history-wrap" hidden aria-label="Votre partie">
@@ -99,15 +90,25 @@
   <div id="finish-modal" class="intro-modal" hidden role="dialog" aria-modal="true" aria-labelledby="finish-title">
     <div class="intro-card finish-card">
       <h1 id="finish-title">Partie terminée</h1>
-      <p class="final-score-kicker">Votre note</p>
+      <p class="final-score-kicker">Score</p>
       <p class="final-score" id="final-score">—</p>
       <p class="finish-pace" id="finish-pace"></p>
       <ul class="finish-recap" id="finish-recap" aria-label="Bilan des manches"></ul>
+      <section class="board" aria-label="Classement">
+        <p class="final-score-kicker">Classement</p>
+        <p class="board-mode" id="board-mode"></p>
+        <form class="board-form" id="board-form">
+          <input id="board-name" name="pseudo" maxlength="20" autocomplete="nickname" placeholder="Ton pseudo" aria-label="Ton pseudo">
+          <button type="submit" class="btn-primary" id="board-save">Enregistrer</button>
+        </form>
+        <p class="board-note" id="board-note"></p>
+        <ol class="board-list" id="board-list"></ol>
+      </section>
       <button type="button" id="btn-replay" class="btn-primary">Rejouer</button>
     </div>
   </div>
 
   <div id="confetti" class="confetti" aria-hidden="true"></div>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

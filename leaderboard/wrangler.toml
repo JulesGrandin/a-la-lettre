@@ -1,0 +1,9 @@
+name = "a-la-lettre"
+main = "src/index.js"
+compatibility_date = "2026-11-12"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "a-la-lettre-scores"
+database_id = "6f4c624c-2be5-409d-ab69-4666b2f56410"

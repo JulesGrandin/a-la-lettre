@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS scores (
+  name TEXT NOT NULL,
+  name_key TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  territory TEXT NOT NULL,
+  places INTEGER NOT NULL,
+  length INTEGER NOT NULL,
+  pace INTEGER NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (name_key, territory, places, length, pace)
+);

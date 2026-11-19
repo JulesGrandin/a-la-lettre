@@ -138,7 +138,6 @@ const ui = {
   loadText: $("load-text"),
   loadFill: $("load-bar-fill"),
   intro: $("intro-modal"),
-  paceNote: $("pace-note"),
   lead: $("intro-lead"),
   start: $("btn-start"),
   timerBlock: $("timer-block"),
@@ -147,7 +146,6 @@ const ui = {
   timerBar: document.querySelector("#timer-block .timer-bar"),
   chrome: $("chrome"),
   kicker: $("round-kicker"),
-  scoreLine: $("score-line"),
   historyWrap: $("history-wrap"),
   history: $("history"),
   stage: $("stage"),
@@ -167,17 +165,31 @@ const ui = {
   finalScore: $("final-score"),
   finishPace: $("finish-pace"),
   recap: $("finish-recap"),
+  boardMode: $("board-mode"),
+  boardForm: $("board-form"),
+  boardName: $("board-name"),
+  boardSave: $("board-save"),
+  boardNote: $("board-note"),
+  boardList: $("board-list"),
   replay: $("btn-replay"),
   confetti: $("confetti"),
 };
 
 const lengthTen = document.querySelector("[data-length='10']");
-const settings = { territory: "world", places: 3, length: 5, ms: 15000 };
+const ROUND_MS = 30000;
+const ROUND_CENTIS = 3000;
+const CENTIS_PER_SECOND = 100;
+const CENTIS_PER_MINUTE = 6000;
+const BOARD_ORIGIN = "https://a-la-lettre.julesgrandin.workers.dev";
+const BOARD_NAME_KEY = "a-la-lettre-pseudo";
+const TERRITORY_LABEL = { world: "Monde", us: "États-Unis", france: "France" };
+const settings = { territory: "world", places: 3, length: 5, ms: ROUND_MS };
 let catalogs = null;
 let indexes = null;
 let rounds = [];
 let index = 0;
 let locked = false;
+let roundStartedAt = 0;
 let roundEndsAt = 0;
 let timerFrame = 0;
 let countdownTimer = 0;
@@ -747,20 +759,53 @@ function escapeHtml(value) {
   }[char]));
 }
 
-function pointsSoFar() {
-  return rounds.reduce((sum, round) => sum + (round.points || 0), 0);
+function formatRoundTime(centis) {
+  const safe = Math.max(0, Math.min(ROUND_CENTIS, Math.round(centis) || 0));
+  const seconds = Math.floor(safe / CENTIS_PER_SECOND);
+  const fraction = String(safe % CENTIS_PER_SECOND).padStart(2, "0");
+  return `${seconds}.${fraction}`;
+}
+
+function formatTotalTime(centis) {
+  const safe = Math.max(0, Math.round(centis) || 0);
+  const minutes = Math.floor(safe / CENTIS_PER_MINUTE);
+  const rest = safe % CENTIS_PER_MINUTE;
+  const seconds = Math.floor(rest / CENTIS_PER_SECOND);
+  const fraction = String(rest % CENTIS_PER_SECOND).padStart(2, "0");
+  const secondsHtml = `${seconds}.${fraction}<span class="time-unit"><span class="time-unit-long"> secondes</span><span class="time-unit-short"> s</span></span>`;
+  if (minutes < 1) return secondsHtml;
+  const minuteWord = minutes < 2 ? "minute" : "minutes";
+  return `${minutes}<span class="time-unit"><span class="time-unit-long"> ${minuteWord}</span><span class="time-unit-short"> m</span></span> ${secondsHtml}`;
+}
+
+function formatShortTime(centis) {
+  const safe = Math.max(0, Math.round(centis) || 0);
+  const minutes = Math.floor(safe / CENTIS_PER_MINUTE);
+  const rest = safe % CENTIS_PER_MINUTE;
+  const seconds = Math.floor(rest / CENTIS_PER_SECOND);
+  const fraction = String(rest % CENTIS_PER_SECOND).padStart(2, "0");
+  const secondsText = `${seconds}.${fraction} s`;
+  if (minutes < 1) return secondsText;
+  return `${minutes} m ${secondsText}`;
+}
+
+function timeSoFar() {
+  return rounds.reduce((sum, round) => sum + (round.done ? (round.centis || 0) : 0), 0);
+}
+
+function placesLabel(count) {
+  return count > 1 ? `${count} lieux` : "1 lieu";
+}
+
+function modeLabel() {
+  const length = rounds.length || roundCount();
+  return `${TERRITORY_LABEL[settings.territory]} · ${placesLabel(settings.places)} · ${length} manches`;
 }
 
 function setPressed(selector, key, value) {
   document.querySelectorAll(selector).forEach((button) => {
     button.setAttribute("aria-pressed", button.dataset[key] === String(value) ? "true" : "false");
   });
-}
-
-function paceLabel(ms) {
-  if (ms === 10000) return "Stressant";
-  if (ms === 5000) return "Hyper stressant";
-  return "À la cool";
 }
 
 const TAGLINE = {
@@ -773,24 +818,18 @@ function syncIntro() {
   const nine = settings.territory === "us" && settings.places === 3;
   lengthTen.textContent = nine ? "9 manches" : "10 manches";
   ui.lead.textContent = TAGLINE[settings.territory];
-  const seconds = settings.ms / 1000;
-  ui.paceNote.textContent = `${seconds} secondes pour trouver ${countPhrase(settings.places, settings.territory)}.`;
 }
 
 function renderHistory() {
   const done = rounds.filter((round) => round.done);
   ui.historyWrap.hidden = done.length === 0;
-  if (!done.length) {
-    ui.history.innerHTML = "";
-    return;
-  }
-  const total = done.reduce((sum, round) => sum + round.points, 0);
-  const max = done.length * settings.places;
   const items = done.map((round) => {
-    const miss = round.points === 0 ? " is-miss" : "";
-    return `<li><span>${round.letter}</span><span class="score-num${miss}">${round.points}/${settings.places}</span></li>`;
+    const miss = round.found.length < settings.places ? " is-miss" : "";
+    return `<li><span>${round.letter}</span><span class="score-num${miss}">${formatRoundTime(round.centis)} s</span></li>`;
   });
-  items.push(`<li class="score-history-total"><span>Score</span><span class="score-num">${total}/${max}</span></li>`);
+  if (done.length) {
+    items.push(`<li class="score-history-total"><span>Score</span><span class="score-num">${formatTotalTime(timeSoFar())}</span></li>`);
+  }
   ui.history.innerHTML = items.join("");
 }
 
@@ -866,7 +905,8 @@ function tickRoundTimer() {
 
 function startRoundTimer() {
   stopRoundTimer();
-  roundEndsAt = Date.now() + settings.ms;
+  roundStartedAt = Date.now();
+  roundEndsAt = roundStartedAt + settings.ms;
   ui.timerBlock.hidden = false;
   ui.timerFill.style.width = "100%";
   ui.timerBar.setAttribute("aria-valuenow", "100");
@@ -904,7 +944,11 @@ function closeRound(kind) {
   const round = rounds[index];
   round.done = true;
   round.outcome = kind;
-  round.examples = kind === "hit" ? "" : exampleSentence(round);
+  const complete = round.found.length >= settings.places;
+  round.centis = complete
+    ? Math.min(ROUND_CENTIS, Math.max(0, Math.round((Date.now() - roundStartedAt) / 10)))
+    : ROUND_CENTIS;
+  round.examples = complete ? "" : exampleSentence(round);
   ui.timerBlock.hidden = true;
   ui.form.hidden = !keepKeyboard;
   ui.feedback.hidden = false;
@@ -912,12 +956,13 @@ function closeRound(kind) {
   ui.feedback.classList.toggle("is-miss", kind !== "hit");
   ui.feedbackKicker.textContent = kind === "hit" ? "Bravo !" : "Temps écoulé";
   if (kind === "hit") launchConfetti();
-  ui.feedbackDetail.hidden = kind === "hit" || !round.examples;
-  ui.feedbackDetail.textContent = round.examples;
+  ui.feedbackDetail.hidden = false;
+  ui.feedbackDetail.textContent = kind === "hit"
+    ? `Temps : ${formatRoundTime(round.centis)} s.`
+    : round.examples;
   const last = index >= rounds.length - 1;
   const label = last ? "Voir le score" : "Manche suivante";
   startCountdown(label);
-  ui.scoreLine.textContent = `Score ${pointsSoFar()}`;
   renderHistory();
   if (!keepKeyboard) ui.guess.blur();
   scheduleFit();
@@ -928,7 +973,6 @@ function renderRound() {
   locked = false;
   leaving = false;
   ui.kicker.textContent = `Manche ${index + 1} / ${rounds.length}`;
-  ui.scoreLine.textContent = `Score ${pointsSoFar()}`;
   ui.askLine.textContent = askText();
   ui.letter.textContent = round.letter;
   ui.guess.placeholder = PLACEHOLDER[settings.territory];
@@ -984,6 +1028,112 @@ function launchConfetti() {
   confettiTimer = window.setTimeout(clearConfetti, 2900);
 }
 
+function ordinal(rank) {
+  return rank === 1 ? "1er" : `${rank}e`;
+}
+
+function boardOrigin() {
+  return BOARD_ORIGIN;
+}
+
+function playedLength() {
+  return rounds.length || roundCount();
+}
+
+function boardQuery(name) {
+  const params = new URLSearchParams({
+    territory: settings.territory,
+    places: String(settings.places),
+    length: String(playedLength()),
+    pace: String(settings.ms),
+  });
+  if (name) params.set("name", name);
+  return `${boardOrigin()}/scores?${params}`;
+}
+
+function paintBoard(data) {
+  ui.boardList.replaceChildren();
+  (data.entries || []).forEach((entry) => {
+    const li = document.createElement("li");
+    if (entry.yours) li.className = "is-you";
+    const rank = document.createElement("span");
+    rank.className = "board-rank";
+    rank.textContent = ordinal(entry.rank);
+    const name = document.createElement("span");
+    name.className = "board-name";
+    name.textContent = entry.name;
+    const score = document.createElement("span");
+    score.className = "board-score";
+    score.textContent = formatShortTime(entry.score);
+    li.append(rank, name, score);
+    ui.boardList.append(li);
+  });
+}
+
+function boardMessage(data, status) {
+  if (!data.total) return "Personne n’a encore enregistré de score sur ce mode.";
+  if (!data.rank) return `${data.total} score${data.total > 1 ? "s" : ""} sur ce mode.`;
+  const place = `Tu es ${ordinal(data.rank)} sur ${data.total}.`;
+  if (status === "created") return `Score enregistré. ${place}`;
+  if (status === "improved") return `Nouveau record. ${place}`;
+  if (status === "kept") return `Ton meilleur temps reste ${formatShortTime(data.best)}. ${place}`;
+  return place;
+}
+
+async function loadBoard() {
+  ui.boardMode.textContent = modeLabel();
+  const name = ui.boardName.value.trim();
+  try {
+    const response = await fetch(boardQuery(name), { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error(String(response.status));
+    const data = await response.json();
+    paintBoard(data);
+    ui.boardNote.textContent = boardMessage(data);
+  } catch {
+    ui.boardList.replaceChildren();
+    ui.boardNote.textContent = "Le classement ne répond pas pour le moment.";
+  }
+}
+
+async function saveBoard(event) {
+  event.preventDefault();
+  const name = ui.boardName.value.trim();
+  const score = timeSoFar();
+  if (!name) {
+    ui.boardNote.textContent = "Indique un pseudo.";
+    return;
+  }
+  ui.boardSave.disabled = true;
+  try {
+    const response = await fetch(`${boardOrigin()}/scores`, {
+      signal: AbortSignal.timeout(8000),
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name,
+        score,
+        territory: settings.territory,
+        places: settings.places,
+        length: playedLength(),
+        pace: settings.ms,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 400 && data.error === "pseudo") {
+      ui.boardNote.textContent = "Deux caractères minimum, sans symbole bizarre.";
+      return;
+    }
+    if (!response.ok) throw new Error(String(response.status));
+    try { localStorage.setItem(BOARD_NAME_KEY, name); } catch { /* mode privé */ }
+    paintBoard(data);
+    ui.boardNote.textContent = boardMessage(data, data.status);
+  } catch {
+    ui.boardNote.textContent = "Le classement ne répond pas pour le moment.";
+  } finally {
+    ui.boardSave.disabled = false;
+  }
+}
+
 function finish() {
   releaseKeyboard();
   stopCountdown();
@@ -993,21 +1143,24 @@ function finish() {
   ui.dock.hidden = true;
   ui.chrome.hidden = true;
   ui.historyWrap.hidden = true;
-  const total = pointsSoFar();
-  const max = rounds.length * settings.places;
-  ui.finalScore.textContent = `${total}/${max}`;
-  ui.finishPace.textContent = paceLabel(settings.ms);
+  ui.finalScore.textContent = formatShortTime(timeSoFar());
+  ui.finishPace.textContent = modeLabel();
   ui.recap.innerHTML = rounds.map((round) => {
-    const miss = round.points === 0 ? " is-miss" : "";
+    const incomplete = round.found.length < settings.places;
+    const miss = incomplete ? " is-miss" : "";
     const names = round.found.map((item) => item.name).join(", ");
     const detail = names || "Ben alors ?";
     return `<li>
       <p class="finish-recap-name">${round.letter}</p>
-      <p class="finish-recap-score${miss}">${round.points}/${settings.places}</p>
+      <p class="finish-recap-score${miss}">${formatShortTime(round.centis == null ? ROUND_CENTIS : round.centis)}</p>
       <p class="finish-recap-detail">${escapeHtml(detail)}</p>
     </li>`;
   }).join("");
   ui.finish.hidden = false;
+  if (!ui.boardName.value) {
+    try { ui.boardName.value = localStorage.getItem(BOARD_NAME_KEY) || ""; } catch { /* mode privé */ }
+  }
+  loadBoard();
 }
 
 function submitGuess(typed) {
@@ -1033,7 +1186,6 @@ function submitGuess(typed) {
   ui.hint.textContent = "";
   ui.guess.value = "";
   renderSlots(true);
-  ui.scoreLine.textContent = `Score ${pointsSoFar()}`;
   scheduleFit();
   if (round.found.length >= settings.places) {
     if (!keepKeyboard) ui.guess.blur();
@@ -1053,6 +1205,7 @@ function startGame() {
     pool: group.pool,
     found: [],
     points: 0,
+    centis: null,
     done: false,
     outcome: null,
     examples: "",
@@ -1062,6 +1215,7 @@ function startGame() {
   ui.intro.hidden = true;
   ui.finish.hidden = true;
   ui.chrome.hidden = false;
+  ui.historyWrap.hidden = true;
   ui.stage.hidden = false;
   ui.dock.hidden = false;
   renderRound();
@@ -1104,13 +1258,6 @@ function bindSettings() {
       syncIntro();
     });
   });
-  document.querySelectorAll("[data-ms]").forEach((button) => {
-    button.addEventListener("click", () => {
-      settings.ms = Number(button.dataset.ms);
-      setPressed("[data-ms]", "ms", settings.ms);
-      syncIntro();
-    });
-  });
   syncIntro();
   ui.start.addEventListener("click", startGame);
   ui.next.addEventListener("click", goNext);
@@ -1120,6 +1267,7 @@ function bindSettings() {
     ui.next.click();
   }, { passive: false });
   ui.replay.addEventListener("click", showIntro);
+  ui.boardForm.addEventListener("submit", saveBoard);
   ui.validate.addEventListener("mousedown", (event) => event.preventDefault());
   ui.form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1127,6 +1275,12 @@ function bindSettings() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.repeat || event.isComposing) return;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (!ui.intro.hidden) {
+      event.preventDefault();
+      startGame();
+      return;
+    }
     if (!locked || leaving || !ui.finish.hidden) return;
     if (ui.feedback.hidden || !ui.feedback.classList.contains("is-hit")) return;
     if (window.matchMedia("(pointer: coarse)").matches) return;
